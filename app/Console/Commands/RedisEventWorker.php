@@ -16,11 +16,42 @@ class RedisEventWorker extends Command
 
     public function handle(): void
     {
-        Redis::subscribe(['App\\Events\\TaskCreated'], function ($message) {
+        $this->info('Redis event worker started...');
 
-            $data = json_decode($message, true);
+        while (true) {
+            try {
+                Redis::subscribe(['events'], function ($message) {
 
-            app(TaskCreatedConsumer::class)->handle($data);
-        });
+                    try {
+                        $data = json_decode($message, true);
+
+                        if (!is_array($data)) {
+                            logger()->error('INVALID EVENT PAYLOAD', [
+                                'payload' => $message,
+                            ]);
+                            return;
+                        }
+
+                        app(TaskCreatedConsumer::class)->handle($data);
+
+                    } catch (\Throwable $e) {
+                        logger()->error('EVENT HANDLING ERROR', [
+                            'message' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'payload' => $message,
+                        ]);
+                    }
+                });
+
+            } catch (\Throwable $e) {
+                logger()->error('REDIS SUBSCRIBE CRASHED', [
+                    'message' => $e->getMessage(),
+                ]);
+
+                $this->warn('Redis connection lost. Reconnecting in 2s...');
+
+                sleep(2);
+            }
+        }
     }
 }

@@ -11,15 +11,13 @@ class TrackTaskCreatedAnalyticsJob implements ShouldQueue
     use Queueable;
 
     public function __construct(
-        public Task $task
+        public int $taskId
     ) {}
 
     public function handle(): void
     {
-        logger()->info('ANALYTICS: task created', [
-            'task_id' => $this->task->id,
-            'user_id' => $this->task->user_id,
-            'project_id' => $this->task->project_id,
+        logger()->info('ANALYTICS', [
+            'task_id' => $this->taskId,
         ]);
     }
 }
