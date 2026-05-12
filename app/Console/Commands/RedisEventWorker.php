@@ -3,8 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Consumers\Analytics\TaskCreatedConsumer;
-use Illuminate\Console\Attributes\Description;
-use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Redis;
 
@@ -16,39 +14,65 @@ class RedisEventWorker extends Command
 
     public function handle(): void
     {
-        $this->info('Redis event worker started...');
+        $stream = 'events';
+        $group = 'default-group';
+        $consumer = 'consumer-1';
+
+        try {
+            Redis::xgroup('CREATE', $stream, $group, '$', true);
+        } catch (\Throwable $e) {
+        }
 
         while (true) {
+
             try {
-                Redis::subscribe(['events'], function ($message) {
+                $messages = Redis::xreadgroup(
+                    $group,
+                    $consumer,
+                    [$stream => '>'],
+                    10,
+                    1000
+                );
 
-                    try {
-                        $data = json_decode($message, true);
+                if (empty($messages)) {
+                    continue;
+                }
 
-                        if (!is_array($data)) {
-                            logger()->error('INVALID EVENT PAYLOAD', [
-                                'payload' => $message,
+                foreach ($messages as $streamName => $entries) {
+
+                    foreach ($entries as $id => $fields) {
+
+                        try {
+                            $event = is_array($fields) ? $fields : [];
+
+                            logger()->info('EVENT RECEIVED', [
+                                'event' => $event,
+                                'id' => $id,
                             ]);
-                            return;
+
+                            match ($event['type'] ?? null) {
+                                'TaskCreated' => app(TaskCreatedConsumer::class)->handle($event),
+                                default => null,
+                            };
+
+                            Redis::xack($stream, $group, [$id]);
+
+                        } catch (\Throwable $e) {
+
+                            logger()->error('EVENT HANDLE ERROR', [
+                                'error' => $e->getMessage(),
+                                'event' => $fields,
+                                'id' => $id,
+                            ]);
                         }
-
-                        app(TaskCreatedConsumer::class)->handle($data);
-
-                    } catch (\Throwable $e) {
-                        logger()->error('EVENT HANDLING ERROR', [
-                            'message' => $e->getMessage(),
-                            'trace' => $e->getTraceAsString(),
-                            'payload' => $message,
-                        ]);
                     }
-                });
+                }
 
             } catch (\Throwable $e) {
-                logger()->error('REDIS SUBSCRIBE CRASHED', [
-                    'message' => $e->getMessage(),
-                ]);
 
-                $this->warn('Redis connection lost. Reconnecting in 2s...');
+                logger()->error('STREAM LOOP ERROR', [
+                    'error' => $e->getMessage(),
+                ]);
 
                 sleep(2);
             }

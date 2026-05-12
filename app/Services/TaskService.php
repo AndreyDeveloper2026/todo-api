@@ -24,13 +24,12 @@ class TaskService
             'user_id' => $user->id,
         ]);
 
-        $this->eventBus->publish(
-            new TaskCreated(
-                taskId: $task->id,
-                userId: $user->id,
-                projectId: $project->id,
-            )
-        );
+        $this->eventBus->publish('events', [
+            'type' => 'TaskCreated',
+            'taskId' => $task->id,
+            'userId' => $user->id,
+            'projectId' => $project->id,
+        ]);
 
         return $task;
     }

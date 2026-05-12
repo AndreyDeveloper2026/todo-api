@@ -2,6 +2,7 @@
 
 namespace App\Consumers\Analytics;
 
+use App\Jobs\SendTaskCreatedNotificationJob;
 use App\Jobs\TrackTaskCreatedAnalyticsJob;
 
 class TaskCreatedConsumer
@@ -11,5 +12,9 @@ class TaskCreatedConsumer
         TrackTaskCreatedAnalyticsJob::dispatch(
             $event['taskId']
         )->onQueue('analytics');
+
+        SendTaskCreatedNotificationJob::dispatch(
+            $event['taskId']
+        )->onQueue('notifications');
     }
 }

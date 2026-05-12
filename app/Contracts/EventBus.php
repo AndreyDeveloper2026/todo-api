@@ -4,5 +4,5 @@ namespace App\Contracts;
 
 interface EventBus
 {
-    public function publish(object $event): void;
+    public function publish(string $stream, array $event): void;
 }
