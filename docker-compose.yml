@@ -1,38 +1,52 @@
 services:
+
     app:
         build:
             context: .
-            dockerfile: docker/app/Dockerfile
-        working_dir: /var/www/html
+            dockerfile: docker/php/Dockerfile
+        container_name: app
         volumes:
             - ./:/var/www/html
-        environment:
-            APP_ENV: production
+        working_dir: /var/www/html
         depends_on:
-            mysql:
-                condition: service_healthy
-            redis:
-                condition: service_started
+            - mysql
+            - redis
         networks:
             - appnet
-        restart: unless-stopped
 
     worker:
         build:
             context: .
-            dockerfile: docker/app/Dockerfile
-        working_dir: /var/www/html
+            dockerfile: docker/php/Dockerfile
+        container_name: worker
         command: php artisan queue:work --sleep=3 --tries=3 --timeout=90
         volumes:
             - ./:/var/www/html
+        working_dir: /var/www/html
         depends_on:
-            - app
+            - mysql
+            - redis
         networks:
             - appnet
-        restart: unless-stopped
+
+    scheduler:
+        build:
+            context: .
+            dockerfile: docker/php/Dockerfile
+        container_name: scheduler
+        command: php artisan schedule:work
+        volumes:
+            - ./:/var/www/html
+        working_dir: /var/www/html
+        depends_on:
+            - mysql
+            - redis
+        networks:
+            - appnet
 
     nginx:
         image: nginx:alpine
+        container_name: nginx
         ports:
             - "8080:80"
         volumes:
@@ -42,10 +56,10 @@ services:
             - app
         networks:
             - appnet
-        restart: unless-stopped
 
     mysql:
         image: mysql:8.0
+        container_name: mysql
         environment:
             MYSQL_DATABASE: todo_api
             MYSQL_ROOT_PASSWORD: root
@@ -53,18 +67,12 @@ services:
             - mysql_data:/var/lib/mysql
         networks:
             - appnet
-        healthcheck:
-            test: ["CMD", "mysqladmin", "ping", "-proot"]
-            interval: 10s
-            timeout: 5s
-            retries: 10
-        restart: unless-stopped
 
     redis:
         image: redis:7-alpine
+        container_name: redis
         networks:
             - appnet
-        restart: unless-stopped
 
 volumes:
     mysql_data:
