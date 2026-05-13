@@ -2,7 +2,9 @@
 
 namespace App\Contracts;
 
+use App\Events\Contracts\EventContract;
+
 interface EventBus
 {
-    public function publish(string $stream, array $event): void;
+    public function publish(EventContract $event): void;
 }

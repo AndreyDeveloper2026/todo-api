@@ -3,13 +3,10 @@
 namespace App\Services;
 
 use App\Contracts\EventBus;
-use App\Events\TaskCreated;
-use App\Jobs\SendTaskCreatedNotificationJob;
-use App\Jobs\TrackTaskCreatedAnalyticsJob;
+use App\Events\TaskCreatedEvent;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;
-use App\Jobs\HandleTaskCreatedJob;
 
 class TaskService
 {
@@ -24,12 +21,15 @@ class TaskService
             'user_id' => $user->id,
         ]);
 
-        $this->eventBus->publish('events', [
-            'type' => 'TaskCreated',
-            'taskId' => $task->id,
-            'userId' => $user->id,
-            'projectId' => $project->id,
-        ]);
+        $this->eventBus->publish(
+            new TaskCreatedEvent(
+                $task->id,
+                $user->id,
+                $project->id,
+            )
+        );
+
+        logger()->info('3 EVENT SENT TO EVENT BUS');
 
         return $task;
     }
