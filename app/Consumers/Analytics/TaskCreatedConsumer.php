@@ -10,7 +10,12 @@ class TaskCreatedConsumer
 {
     public function handle(array $event): void
     {
-        if (ProcessedEvent::where('event_id', $event['event_id'])->exists()) {
+        $processed = ProcessedEvent::firstOrCreate(
+            ['event_id' => $event['event_id']],
+            ['processed_at' => now()]
+        );
+
+        if (! $processed->wasRecentlyCreated) {
             logger()->info('EVENT SKIPPED (duplicate)', [
                 'event_id' => $event['event_id'],
             ]);
@@ -22,18 +27,11 @@ class TaskCreatedConsumer
             'event_id' => $event['event_id'],
         ]);
 
-        TrackTaskCreatedAnalyticsJob::dispatch(
-            $event['taskId']
-        )->onQueue('analytics');
+        TrackTaskCreatedAnalyticsJob::dispatch($event['taskId'])
+            ->onQueue('analytics');
 
-        SendTaskCreatedNotificationJob::dispatch(
-            $event['taskId']
-        )->onQueue('notifications');
-
-        ProcessedEvent::create([
-            'event_id' => $event['event_id'],
-            'processed_at' => now(),
-        ]);
+        SendTaskCreatedNotificationJob::dispatch($event['taskId'])
+            ->onQueue('notifications');
 
         logger()->info('EVENT MARKED PROCESSED', [
             'event_id' => $event['event_id'],
