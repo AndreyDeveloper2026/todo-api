@@ -6,11 +6,13 @@ RUN apt-get update && apt-get install -y \
     git unzip libzip-dev \
     && docker-php-ext-install pdo pdo_mysql zip pcntl
 
+# Redis extension (важно для queue)
 RUN pecl install redis \
     && docker-php-ext-enable redis
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# зависимости
 COPY composer.json composer.lock ./
 
 RUN composer install \
@@ -19,6 +21,8 @@ RUN composer install \
     --optimize-autoloader \
     --no-scripts
 
+# код
 COPY . .
 
-CMD ["php", "artisan", "events:consume"]
+# worker (PRODUCTION WAY)
+CMD ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--timeout=90"]
