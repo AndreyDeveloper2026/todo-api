@@ -9,11 +9,11 @@ services:
             - ./:/var/www/html
         working_dir: /var/www/html
         depends_on:
-            mysql:
-                condition: service_healthy
-            redis:
-                condition: service_started
+            - redis
+            - mysql
         restart: unless-stopped
+        networks:
+            - appnet
 
     worker:
         build:
@@ -25,11 +25,11 @@ services:
         working_dir: /var/www/html
         command: php artisan events:consume
         depends_on:
-            mysql:
-                condition: service_healthy
-            redis:
-                condition: service_started
+            - redis
+            - mysql
         restart: unless-stopped
+        networks:
+            - appnet
 
     nginx:
         image: nginx:alpine
@@ -42,30 +42,38 @@ services:
         depends_on:
             - app
         restart: unless-stopped
+        networks:
+            - appnet
 
     redis:
         image: redis:7-alpine
         container_name: redis
-        ports:
-            - "6380:6379"
         restart: unless-stopped
+        networks:
+            - appnet
 
     mysql:
         image: mysql:8.0
         container_name: mysql
-        restart: unless-stopped
         environment:
             MYSQL_DATABASE: todo_api
             MYSQL_ROOT_PASSWORD: root
-        ports:
-            - "3307:3306"
+            MYSQL_USER: laravel
+            MYSQL_PASSWORD: laravel
         volumes:
             - mysql_data:/var/lib/mysql
+        restart: unless-stopped
+        networks:
+            - appnet
         healthcheck:
-            test: ["CMD", "mysqladmin", "ping", "-proot"]
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
             interval: 5s
             timeout: 5s
             retries: 10
 
 volumes:
     mysql_data:
+
+networks:
+    appnet:
+        driver: bridge
