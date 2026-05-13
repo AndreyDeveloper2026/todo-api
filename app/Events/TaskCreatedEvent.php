@@ -36,7 +36,6 @@ class TaskCreatedEvent implements EventContract
             'userId' => $this->userId,
             'projectId' => $this->projectId,
             'version' => 1,
-            'attempts' => 0,
         ];
     }
 }
