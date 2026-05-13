@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Consumers\Analytics\TaskCreatedConsumer;
+use App\Domains\Task\Consumers\TaskCreatedConsumer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Redis;
 
@@ -20,7 +20,6 @@ class RedisEventWorker extends Command
         $this->ensureGroupExists();
 
         while (true) {
-
             try {
                 $messages = Redis::xreadgroup(
                     $this->group,
@@ -49,6 +48,15 @@ class RedisEventWorker extends Command
                         ]);
 
                         try {
+                            // optional: различаем retry поток
+                            if ($streamName === 'events:retry') {
+                                logger()->warning('RETRY STREAM EVENT', [
+                                    'id' => $id,
+                                    'event_id' => $event['event_id'] ?? null,
+                                    'attempts' => $event['attempts'] ?? null,
+                                ]);
+                            }
+
                             $this->handleEvent($event);
 
                             Redis::xack($streamName, $this->group, [$id]);
@@ -87,7 +95,7 @@ class RedisEventWorker extends Command
     {
         match ($event['type'] ?? null) {
             'TaskCreated' => app(TaskCreatedConsumer::class)->handle($event),
-            default => null,
+            default => logger()->warning('UNKNOWN EVENT TYPE', $event),
         };
     }
 
@@ -96,9 +104,14 @@ class RedisEventWorker extends Command
         $attempts = (int) ($event['attempts'] ?? 0) + 1;
         $event['attempts'] = $attempts;
 
+        $event['next_attempt_at'] = now()->addSeconds($attempts * 5)->timestamp;
+
         if ($attempts >= 5) {
 
-            Redis::xadd('events:dlq', '*', $event);
+            Redis::xadd('events:dlq', '*', [
+                ...$event,
+                'failed_at' => now()->timestamp,
+            ]);
 
             Redis::xack($streamName, $this->group, [$id]);
 

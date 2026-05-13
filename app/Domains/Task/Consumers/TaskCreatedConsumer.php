@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Consumers\Analytics;
+namespace App\Domains\Task\Consumers;
 
 use App\Jobs\SendTaskCreatedNotificationJob;
 use App\Jobs\TrackTaskCreatedAnalyticsJob;
