@@ -2,8 +2,8 @@
 
 namespace App\Domains\Task\Consumers;
 
-use App\Jobs\SendTaskCreatedNotificationJob;
-use App\Jobs\TrackTaskCreatedAnalyticsJob;
+use App\Domains\Task\Jobs\SendTaskCreatedNotificationJob;
+use App\Domains\Task\Jobs\TrackTaskCreatedAnalyticsJob;
 use App\Models\ProcessedEvent;
 
 class TaskCreatedConsumer

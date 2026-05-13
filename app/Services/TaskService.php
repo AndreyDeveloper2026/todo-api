@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\EventBus;
-use App\Events\TaskCreatedEvent;
+use App\Domains\Task\Events\TaskCreatedEvent;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;

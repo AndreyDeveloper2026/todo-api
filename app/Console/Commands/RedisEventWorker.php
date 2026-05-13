@@ -2,14 +2,14 @@
 
 namespace App\Console\Commands;
 
-use App\Domains\Task\Consumers\TaskCreatedConsumer;
+use App\Infrastructure\Event\ConsumerRouter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Redis;
 
 class RedisEventWorker extends Command
 {
     protected $signature = 'events:consume';
-    protected $description = 'Consume Redis events (production style)';
+    protected $description = 'Redis Event Runtime Engine (Stage 4)';
 
     private string $stream = 'events';
     private string $retryStream = 'events:retry';
@@ -24,27 +24,24 @@ class RedisEventWorker extends Command
 
         while (true) {
             try {
-
                 $messages = Redis::xreadgroup(
                     $this->group,
                     $this->consumer,
-                    [$this->stream => '>'],
+                    [
+                        $this->stream => '>',
+                        $this->retryStream => '>',
+                    ],
                     10,
                     1000
                 );
 
-                if (!empty($messages)) {
-                    $this->processMessages($messages);
+                if (empty($messages)) {
+                    continue;
                 }
 
-                $retryMessages = Redis::xrange($this->retryStream, '-', '+', 10);
-
-                if (!empty($retryMessages)) {
-                    $this->processRetryMessages($retryMessages);
-                }
+                $this->processMessages($messages);
 
             } catch (\Throwable $e) {
-
                 logger()->error('STREAM LOOP ERROR', [
                     'error' => $e->getMessage(),
                 ]);
@@ -64,15 +61,24 @@ class RedisEventWorker extends Command
                 logger()->info('EVENT RECEIVED', [
                     'stream' => $streamName,
                     'id' => $id,
-                    'event' => $event,
+                    'type' => $event['type'] ?? null,
                 ]);
 
                 try {
-                    $this->handleEvent($event);
+                    if ($streamName === $this->retryStream) {
+                        $nextAttempt = (int) ($event['next_attempt_at'] ?? 0);
+
+                        if ($nextAttempt > now()->timestamp) {
+                            continue;
+                        }
+                    }
+
+                    app(ConsumerRouter::class)->handle($event);
 
                     Redis::xack($streamName, $this->group, [$id]);
 
                     logger()->info('EVENT ACKED', [
+                        'stream' => $streamName,
                         'id' => $id,
                     ]);
 
@@ -85,51 +91,15 @@ class RedisEventWorker extends Command
                         'event' => $event,
                     ]);
 
-                    $this->moveToRetryOrDlq($event, $id, $streamName, $e->getMessage());
+                    $this->moveToRetryOrDlq(
+                        $event,
+                        $id,
+                        $streamName,
+                        $e->getMessage()
+                    );
                 }
             }
         }
-    }
-
-    private function processRetryMessages(array $messages): void
-    {
-        foreach ($messages as $id => $event) {
-
-            $nextAttempt = (int) ($event['next_attempt_at'] ?? 0);
-
-            if ($nextAttempt > now()->timestamp) {
-                continue;
-            }
-
-            try {
-                logger()->info('RETRY EVENT PROCESSING', [
-                    'event_id' => $event['event_id'] ?? null,
-                    'attempts' => $event['attempts'] ?? null,
-                ]);
-
-                $this->handleEvent($event);
-
-                Redis::xdel($this->retryStream, [$id]);
-
-            } catch (\Throwable $e) {
-
-                logger()->error('RETRY EVENT FAILED AGAIN', [
-                    'error' => $e->getMessage(),
-                    'id' => $id,
-                    'event' => $event,
-                ]);
-
-                $this->moveToRetryOrDlq($event, $id, $this->retryStream, $e->getMessage());
-            }
-        }
-    }
-
-    private function handleEvent(array $event): void
-    {
-        match ($event['type'] ?? null) {
-            'TaskCreated' => app(TaskCreatedConsumer::class)->handle($event),
-            default => logger()->warning('UNKNOWN EVENT TYPE', $event),
-        };
     }
 
     private function moveToRetryOrDlq(
@@ -138,8 +108,8 @@ class RedisEventWorker extends Command
         string $streamName,
         string $error
     ): void {
-
         $attempts = (int) ($event['attempts'] ?? 0) + 1;
+
         $event['attempts'] = $attempts;
 
         $delay = match ($attempts) {

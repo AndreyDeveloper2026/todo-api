@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Events;
+namespace App\Domains\Task\Events;
 
 use App\Events\Contracts\EventContract;
 use Illuminate\Support\Str;
@@ -32,10 +32,16 @@ class TaskCreatedEvent implements EventContract
         return [
             'event_id' => $this->id(),
             'type' => $this->type(),
-            'taskId' => $this->taskId,
-            'userId' => $this->userId,
-            'projectId' => $this->projectId,
             'version' => 1,
+
+            'payload' => [
+                'taskId' => $this->taskId,
+                'userId' => $this->userId,
+                'projectId' => $this->projectId,
+            ],
+
+            'attempts' => 0,
+            'next_attempt_at' => null,
         ];
     }
 }
