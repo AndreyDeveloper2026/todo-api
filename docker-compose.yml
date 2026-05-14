@@ -1,10 +1,12 @@
+version: "3.9"
+
 services:
 
-    app:
+    api:
         build:
             context: .
             dockerfile: docker/php/Dockerfile
-        container_name: app
+        container_name: api
         volumes:
             - ./:/var/www/html
         working_dir: /var/www/html
@@ -12,7 +14,9 @@ services:
             - mysql
             - redis
         networks:
-            - appnet
+            - backend
+        expose:
+            - "9000"
 
     worker:
         build:
@@ -22,12 +26,11 @@ services:
         command: php artisan queue:work --sleep=3 --tries=3 --timeout=90
         volumes:
             - ./:/var/www/html
-        working_dir: /var/www/html
         depends_on:
-            - mysql
             - redis
+            - mysql
         networks:
-            - appnet
+            - backend
 
     scheduler:
         build:
@@ -37,12 +40,11 @@ services:
         command: php artisan schedule:work
         volumes:
             - ./:/var/www/html
-        working_dir: /var/www/html
         depends_on:
-            - mysql
             - redis
+            - mysql
         networks:
-            - appnet
+            - backend
 
     nginx:
         image: nginx:alpine
@@ -53,9 +55,9 @@ services:
             - ./:/var/www/html
             - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
         depends_on:
-            - app
+            - api
         networks:
-            - appnet
+            - backend
 
     mysql:
         image: mysql:8.0
@@ -66,17 +68,19 @@ services:
         volumes:
             - mysql_data:/var/lib/mysql
         networks:
-            - appnet
+            - backend
+        restart: unless-stopped
 
     redis:
         image: redis:7-alpine
         container_name: redis
         networks:
-            - appnet
+            - backend
+        restart: unless-stopped
 
 volumes:
     mysql_data:
 
 networks:
-    appnet:
+    backend:
         driver: bridge
